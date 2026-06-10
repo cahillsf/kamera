@@ -36,7 +36,7 @@ After creating a [new MachineSet via SSA](https://github.com/cahillsf/cluster-ap
 	var pollErrors []error
 	if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
 		ms := &clusterv1.MachineSet{}
-		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(newMS), ms); err != nil { // kameria -> reads frozen frame → 404
+		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(newMS), ms); err != nil { // kamera -> reads frozen frame → 404
 			// Do not return error here. Continue to poll even if we hit an error
 			// so that we avoid existing because of transient errors like network flakes.
 			// Capture all the errors and return the aggregate error if the poll fails eventually.
