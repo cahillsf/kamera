@@ -20,16 +20,34 @@ reconcilers without their in-flight writes contaminating each other's reads.
 
 ### What MachineDeployment does
 
-After creating a new MachineSet via SSA, the controller immediately polls for it:
+After creating a [new MachineSet via SSA](https://github.com/cahillsf/cluster-api/blob/c587e3e02639b4f6d5504b1cd30395120356f323/internal/controllers/machinedeployment/machinedeployment_sync.go#L179-L203), the controller immediately polls for it:
 
 ```go
-// machinedeployment_sync.go
-ssa.Patch(ctx, r.Client, fieldManager, newMS)   // write recorded as APPLY effect
+	if err := ssa.Patch(ctx, r.Client, machineDeploymentManagerName, newMS); err != nil { // kamera -> write recorded as APPLY effect
+		r.recorder.Eventf(deployment, corev1.EventTypeWarning, "FailedCreate", "Failed to create MachineSet %s: %v", klog.KObj(newMS), err)
+		return nil, errors.Wrapf(err, "failed to create new MachineSet %s", klog.KObj(newMS))
+	}
+	log.Info(fmt.Sprintf("MachineSet created (%s)", createReason))
+	r.recorder.Eventf(deployment, corev1.EventTypeNormal, "SuccessfulCreate", "Created MachineSet %s", klog.KObj(newMS))
 
-wait.PollUntilContextTimeout(ctx, 100ms, 10s, func(ctx context.Context) (bool, error) {
-    return r.Client.Get(ctx, client.ObjectKeyFromObject(newMS), ms)  // reads frozen frame → 404
-})
-// times out after 10 seconds, returns error
+	// Keep trying to get the MachineSet. This will force the cache to update and prevent any future reconciliation of
+	// the MachineDeployment to reconcile with an outdated list of MachineSets which could lead to unwanted creation of
+	// a duplicate MachineSet.
+	var pollErrors []error
+	if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+		ms := &clusterv1.MachineSet{}
+		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(newMS), ms); err != nil { // kameria -> reads frozen frame → 404
+			// Do not return error here. Continue to poll even if we hit an error
+			// so that we avoid existing because of transient errors like network flakes.
+			// Capture all the errors and return the aggregate error if the poll fails eventually.
+			pollErrors = append(pollErrors, err)
+			return false, nil
+		}
+		return true, nil
+	}); err != nil {
+		return nil, errors.Wrapf(kerrors.NewAggregate(pollErrors), "failed to get the MachineSet %s after creation", klog.KObj(newMS))
+	}
+	return newMS, nil
 ```
 
 The poll is there in production to wait for the informer cache to catch up with
