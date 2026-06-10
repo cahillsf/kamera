@@ -11,6 +11,9 @@
 # Test binary, built with `go test -c`
 *.test
 
+# Goland
+.idea/**
+
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
@@ -61,7 +64,6 @@ examples/kro/kro
 # === Post-paper cleanup (2026-04-25) ===
 
 # Local symlinks to out-of-tree harnesses (see examples/README.md).
-examples/cluster-api
 examples/kcp
 
 # Discarded experiment outputs
